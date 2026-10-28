@@ -3,8 +3,7 @@ import logging
 import os
 import textwrap
 import time
-# from datetime import datetime
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Annotated
 
 from dotenv import load_dotenv
@@ -21,49 +20,11 @@ from livekit.agents import (
 from livekit.plugins import deepgram, groq, silero
 from pydantic import Field
 
-
-
 from db import close_db, describe_db_url, get_db
 
 load_dotenv(".env.local")
 
 print("DATABASE CONFIG:", describe_db_url())
-
-
-# cut if wrong
-TZ = timezone(timedelta(hours=6))  # Bangladesh time (UTC+6)
-
-
-def calendar_hint() -> str:
-    now = datetime.now(TZ)
-    lines = [
-        f"Today is {now:%A} {now:%Y-%m-%d}.",
-        "Upcoming days:",
-    ]
-
-    for i in range(1, 15):
-        d = now + timedelta(days=i)
-        lines.append(f"{d:%A} = {d:%Y-%m-%d}")
-
-    lines.append(
-        "Resolve relative dates such as tomorrow and next Monday "
-        "using this calendar. Never guess the date."
-    )
-    return "\n".join(lines)
-# till here
-
-def spoken_time(hhmm: str) -> str:
-    t = datetime.strptime(hhmm, "%H:%M")
-    hour = t.hour % 12 or 12
-    suffix = "AM" if t.hour < 12 else "PM"
-    if t.minute == 0:
-        return f"{hour} {suffix}"
-    return f"{hour}:{t.minute:02d} {suffix}"
-
-
-def spoken_date(yyyy_mm_dd: str) -> str:
-    d = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d")
-    return f"{d:%A}, {d:%B} {d.day}"
 
 logger = logging.getLogger("agent")
 logging.basicConfig(level=logging.INFO)
@@ -77,27 +38,21 @@ class Assistant(Agent):
             instructions=textwrap.dedent(
                 """\
                 You are a friendly voice assistant that helps users check
-                appointment availability and book slots. You schedule appointments only. You never give counseling, advice, or opinions about feelings or health.
+                appointment availability and book slots.
 
                 # Output rules (voice)
                 - Speak in plain text only. No markdown, lists, emojis or code.
                 - Keep replies short (1-3 sentences).
                 - Ask only one question at a time.
                 - Never invent availability. Always use the tools.
-                - Say times like "2:30 PM" or "9 AM", never 24-hour times like 14:30. Use the "say" value from the tool result.
-                - Say dates like "Friday, October 30", never like 2026-10-30. Use "say_date".
-                - When listing open slots, mention at most four at a time, then ask if they want to hear more.
-                - When calling tools, still pass the date as YYYY-MM-DD and the time from "book_as".
 
                 # Behaviour
                 - When the user asks about availability, call check_availability.
-                - Before calling book_slot you must know the caller's name. If they have not told you, ask "What name should I put the booking under?" Never guess a name or use a placeholder like User or Guest.
                 - When they want to book, call book_slot with the exact date and time.
                 - Confirm the booking clearly after a successful book_slot call.
                 - If a tool fails, tell the user once and offer to try again.
-                - You cannot cancel, change, or look up existing bookings. If asked, say you can't do that.
                 """
-            ) + "\n" + calendar_hint(),
+            ),
         )
 
     @function_tool()
@@ -120,12 +75,6 @@ class Assistant(Agent):
                 "error": "invalid_date",
                 "message": "Date must be in YYYY-MM-DD format.",
             }
-        if date < datetime.now(TZ).date().isoformat():
-            return {
-                "ok": False,
-                "error": "past_date",
-                "message": "That date is in the past. Please choose a future date.",
-            }
 
         try:
             async with asyncio.timeout(4.0):
@@ -134,14 +83,11 @@ class Assistant(Agent):
                     where={"date": date, "isBooked": False},
                     order={"time": "asc"},
                 )
-                available = [
-                    {"say": spoken_time(s.time), "book_as": s.time} for s in slots
-                ]
+                available = [s.time for s in slots]
                 return {
                     "ok": True,
                     "date": date,
-                    "say_date": spoken_date(date),
-                    "slots": available,
+                    "available_slots": available,
                     "count": len(available),
                 }
         except TimeoutError:
@@ -172,11 +118,8 @@ class Assistant(Agent):
         ],
         name: Annotated[
             str,
-            Field(
-                description="The name the caller said for this booking. "
-                "Never guess or invent one. If the caller has not given a name, ask for it first."
-            ),
-        ],
+            Field(description="Name of the person booking the appointment"),
+        ] = "Guest",
     ) -> dict:
         """Book an available slot. Validates the slot still exists."""
         logger.info("Tool: book_slot date=%s time=%s name=%s", date, time, name)
@@ -190,44 +133,33 @@ class Assistant(Agent):
                 "error": "invalid_format",
                 "message": "Date must be YYYY-MM-DD and time must be HH:MM.",
             }
-        if date < datetime.now(TZ).date().isoformat():
-            return {
-                "ok": False,
-                "error": "past_date",
-                "message": "That date is in the past. Please choose a future date.",
-            }
-        clean_name = name.strip()[:50]
-        if len(clean_name) < 2 or clean_name.lower() in {
-            "user", "guest", "unknown", "caller", "anonymous", "name", "me", "none", "n/a",
-        }:
-            logger.error("book_slot rejected name: %r", name)
-            return {
-                "ok": False,
-                "error": "name_required",
-                "message": "Ask the caller what name to book under, then try again.",
-            }
 
         try:
-            async with asyncio.timeout(8.0):
+            async with asyncio.timeout(4.0):
                 db = await get_db()
-                async with db.tx() as tx:
-                    claimed = await tx.slot.update_many(
-                        where={"date": date, "time": time, "isBooked": False},
-                        data={"isBooked": True, "bookedBy": clean_name},
-                    )
-                    if claimed == 0:
-                        return {
-                            "ok": False,
-                            "error": "slot_unavailable",
-                            "message": f"The {spoken_time(time)} slot on {spoken_date(date)} is no longer available.",
-                        }
-                    booking = await tx.booking.create(
-                        data={"date": date, "time": time, "name": clean_name}
-                    )
-                    await tx.slot.update_many(
-                        where={"date": date, "time": time},
-                        data={"bookingId": booking.id},
-                    )
+                slot = await db.slot.find_first(
+                    where={"date": date, "time": time, "isBooked": False}
+                )
+                if not slot:
+                    return {
+                        "ok": False,
+                        "error": "slot_unavailable",
+                        "message": f"The {time} slot on {date} is no longer available.",
+                    }
+
+                await db.slot.update(
+                    where={"id": slot.id},
+                    data={"isBooked": True, "bookedBy": name},
+                )
+
+                booking = await db.booking.create(
+                    data={
+                        "date": date,
+                        "time": time,
+                        "name": name,
+                    }
+                )
+
                 return {
                     "ok": True,
                     "booking": {
@@ -236,7 +168,7 @@ class Assistant(Agent):
                         "time": booking.time,
                         "name": booking.name,
                     },
-                    "message": f"Successfully booked {spoken_time(time)} on {spoken_date(date)} for {clean_name}.",
+                    "message": f"Successfully booked {time} on {date} for {name}.",
                 }
         except TimeoutError:
             return {
