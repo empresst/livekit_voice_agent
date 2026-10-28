@@ -33,6 +33,8 @@ COPY . .
 # Generate Prisma client (this was missing)
 RUN uv run prisma generate
 
+RUN uv run prisma py fetch
+
 # --- Production stage ---
 FROM base
 
