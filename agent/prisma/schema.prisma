@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-py"
+  interface = "asyncio"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Call {
+  id        String   @id @default(cuid())
+  roomName  String
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+  duration  Int?     // seconds
+  createdAt DateTime @default(now())
+
+  toolResults ToolResult[]
+}
+
+model ToolResult {
+  id        String   @id @default(cuid())
+  callId    String?
+  call      Call?    @relation(fields: [callId], references: [id])
+  toolName  String
+  args      Json
+  result    Json
+  success   Boolean
+  durationMs Int?
+  createdAt DateTime @default(now())
+}
+
+model Slot {
+  id        String   @id @default(cuid())
+  date      String   // YYYY-MM-DD
+  time      String   // HH:MM
+  isBooked  Boolean  @default(false)
+  bookedBy  String?
+  bookingId String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id        String   @id @default(cuid())
+  date      String
+  time      String
+  name      String
+  createdAt DateTime @default(now())
+}
