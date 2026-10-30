@@ -1,3 +1,4 @@
+
 import { chromium } from "playwright";
 
 const URL = "https://livekit-voice-agent-five.vercel.app";
@@ -18,26 +19,35 @@ try {
 
   const page = await context.newPage();
 
+  page.on("console", msg => console.log("BROWSER CONSOLE:", msg.type(), msg.text()));
+  page.on("pageerror", error => console.log("BROWSER ERROR:", error.message));
+  page.on("requestfailed", request =>
+    console.log("REQUEST FAILED:", request.url(), request.failure()?.errorText)
+  );
+  page.on("response", response => {
+    if (response.status() >= 400) {
+      console.log("HTTP ERROR:", response.status(), response.url());
+    }
+  });
+
   console.log("Opening receptionist...");
   await page.goto(URL, { waitUntil: "domcontentloaded" });
 
   console.log("Starting call...");
   await page.getByRole("button", { name: "Start Call" }).click();
 
-  console.log("Waiting for LiveKit connection...");
-  await page.getByText("Connected – speak now", {
-    exact: true,
-  }).waitFor({ state: "visible", timeout: 90000 });
+  console.log("Waiting 30 seconds...");
+  await page.waitForTimeout(30000);
 
-  console.log("Connected. Allowing greeting to play...");
-  await page.waitForTimeout(8000);
+  console.log("VISIBLE PAGE TEXT:");
+  console.log((await page.locator("body").innerText()).slice(0, 5000));
 
-  await page.getByRole("button", { name: "End Call" }).click();
+  await page.screenshot({ path: "/tmp/warmup-debug.png", fullPage: true });
+  console.log("Screenshot saved.");
 
-  console.log("Warmup call ended successfully.");
   await context.close();
 } catch (error) {
-  console.error("Warmup failed:", error);
+  console.error("Warmup diagnostic failed:", error);
   process.exitCode = 1;
 } finally {
   await browser.close();
