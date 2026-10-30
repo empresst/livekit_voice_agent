@@ -1,5 +1,7 @@
 "use client";
-
+import SlotsPanel from "@/components/SlotsPanel";
+import AgentVisual from "@/components/AgentVisual";
+import CursorGlow from "@/components/CursorGlow";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -49,7 +51,7 @@ export default function Home() {
 
     setToken(data.token);
     setUrl(data.url);
-    
+
       if (data.error) throw new Error(data.error);
       setToken(data.token);
       setUrl(data.url);
@@ -68,8 +70,9 @@ export default function Home() {
 
   if (token && url) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
-        <h1 className="text-2xl font-semibold mb-2">Voice Agent Demo</h1>
+      <div className="relative isolate min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+        <CursorGlow />
+        <h1 className="text-2xl font-semibold mb-2">Receptionist Voice Agent</h1>
         <LiveKitRoom
           token={token}
           serverUrl={url}
@@ -80,6 +83,8 @@ export default function Home() {
           className="w-full max-w-md"
         >
           <CallStatus />
+          <AgentVisual />
+          <RoomAudioRenderer />
           <RoomAudioRenderer />
           <ControlBar controls={{ camera: false, screenShare: false }} />
         </LiveKitRoom>
@@ -89,13 +94,15 @@ export default function Home() {
         >
           End Call
         </button>
+        <SlotsPanel active />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
-      <h1 className="text-3xl font-bold mb-2">Voice Agent Demo</h1>
+    <div className="relative isolate min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+      <CursorGlow />
+      <h1 className="text-3xl font-bold mb-2">Receptionist Voice Agent</h1>
       <p className="text-gray-400 mb-8 text-center max-w-md">
         Click the button and talk to the AI assistant. You can check availability
         and book appointment slots.
@@ -107,6 +114,7 @@ export default function Home() {
       >
         {connecting ? "Connecting…" : "Start Call"}
       </button>
+      <SlotsPanel active={false} />
     </div>
   );
 }
