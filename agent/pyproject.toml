@@ -12,6 +12,7 @@ dependencies = [
     "livekit-agents[deepgram,google,groq]~=1.8",
     "livekit-plugins-ai-coustics~=0.3",
     "livekit-plugins-silero~=1.8",
+    "nodeenv==1.9.1",
     "prisma>=0.15.0",
     "python-dotenv",
 ]
