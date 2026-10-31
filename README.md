@@ -5,6 +5,11 @@ A real-time AI voice agent that answers a browser call, checks live appointment 
 **Live:** https://livekit-voice-agent-five.vercel.app/
 Open the link, allow microphone access, click **Start call**, and talk.
 
+## Demo
+Click the image and download the video to watch the performance
+
+[![Watch Demo,click and download the video to watch the 3d orb](https://github.com/empresst/livekit_voice_agent/blob/main/docs/thumbnail.png)](https://github.com/empresst/livekit_voice_agent/blob/main/docs/output.mp4)
+
 Calls are capped at 3 minutes and 5 calls per hour per network. Bookings are shared public data that reset regularly, so please use a made-up first name. The agent does not provide counseling or advice. If someone describes distress, it says it can't help with that here and points them to a counselor or emergency services.
 
 ## Stack
